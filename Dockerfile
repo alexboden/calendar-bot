@@ -14,7 +14,7 @@ RUN apt-get update && apt-get install -y ca-certificates && rm -rf /var/lib/apt/
 WORKDIR /app
 COPY --from=builder /app/calendar-bot .
 
-COPY credentials.json token.json processed_ids.txt .env ./
+COPY credentials.json token.json .env ./
 
 ENTRYPOINT ["./calendar-bot"]
 
