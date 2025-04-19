@@ -25,8 +25,25 @@ import (
 )
 
 func main() {
+	failCount := 0
+	maxFailures := 10
+
 	for {
-		checkInbox()
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					failCount++
+					log.Printf("Recovered from panic: %v (failure #%d)", r, failCount)
+					if failCount >= maxFailures {
+						log.Fatalf("Too many failures (%d). Exiting.", maxFailures)
+					}
+				}
+			}()
+			
+			checkInbox()
+			failCount = 0 // Reset counter on successful execution
+		}()
+
 		time.Sleep(3 * time.Second)
 		log.Println("Checking inbox...")
 	}
@@ -40,13 +57,12 @@ type CalendarEvent struct {
 	Description string `json:"description"`
 }
 
-
 func loadProcessedIDs(filename string) map[string]bool {
 	processed := make(map[string]bool)
 
 	file, err := os.Open(filename)
 	if err != nil {
-		return processed // file might not exist yet
+		return processed 
 	}
 	defer file.Close()
 
@@ -110,7 +126,6 @@ func checkInbox() {
 		log.Printf("Processing message ID: %s", m.Id)
 		log.Printf("Email Body: %s", emailBody)
 		if strings.Contains(emailBody, "Email Body: Alex Boden has declined this invitation.") {
-			log.Printf("Skipping declined invitation for message ID: %s", m.Id)
 			log.Printf("Skipping declined invitation for message ID: %s", m.Id)
 			continue
 		}
