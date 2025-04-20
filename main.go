@@ -24,9 +24,33 @@ import (
 	"google.golang.org/api/option"
 )
 
+func pingHealthCheck() {
+	if err := godotenv.Load(); err != nil {
+		log.Printf("Warning: Error loading .env file: %v", err)
+	}
+	healthCheckURL := os.Getenv("HEALTHCHECK_URL")
+	if healthCheckURL == "" {
+		log.Println("No HEALTHCHECK_URL configured, skipping health checks")
+		return
+	}
+
+	ticker := time.NewTicker(5 * time.Minute)
+	for range ticker.C {
+		resp, err := http.Get(healthCheckURL)
+		if err != nil {
+			log.Printf("Failed to ping health check: %v", err)
+			continue
+		}
+		resp.Body.Close()
+	}
+}
+
 func main() {
 	failCount := 0
 	maxFailures := 10
+
+	// Start health check pinger in separate goroutine
+	go pingHealthCheck()
 
 	for {
 		func() {
@@ -39,14 +63,24 @@ func main() {
 					}
 				}
 			}()
-			
-			checkInbox()
-			failCount = 0 // Reset counter on successful execution
+	
+			err := checkInbox()
+			if err != nil {
+				failCount++
+				log.Printf("Error in checkInbox: %v (failure #%d)", err, failCount)
+				if failCount >= maxFailures {
+					log.Fatalf("Too many failures (%d). Exiting.", maxFailures)
+				}
+				return
+			}
+	
+			failCount = 0 // Reset on success
 		}()
-
-		time.Sleep(3 * time.Second)
+	
+		time.Sleep(30 * time.Second) // More generous polling interval
 		log.Println("Checking inbox...")
 	}
+	
 }
 
 type CalendarEvent struct {
