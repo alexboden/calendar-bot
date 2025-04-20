@@ -109,12 +109,12 @@ func loadProcessedIDs(filename string) map[string]bool {
 	return processed
 }
 
-func checkInbox() {
+func checkInbox() error {
 	ctx := context.Background()
 
 	b, err := os.ReadFile("credentials.json")
 	if err != nil {
-		log.Fatalf("Unable to read client secret file: %v", err)
+		return fmt.Errorf("Unable to read client secret file: %v", err)
 	}
 
 	config, err := google.ConfigFromJSON(b,
@@ -122,13 +122,13 @@ func checkInbox() {
 		gmail.GmailReadonlyScope,
 	)
 	if err != nil {
-		log.Fatalf("Unable to parse client secret file to config: %v", err)
+		return fmt.Errorf("Unable to parse client secret file to config: %v", err)
 	}
 
 	client := getClient(config)
 	srv, err := gmail.NewService(ctx, option.WithHTTPClient(client))
 	if err != nil {
-		log.Fatalf("Unable to retrieve Gmail client: %v", err)
+		return fmt.Errorf("Unable to retrieve Gmail client: %v", err)
 	}
 
 	user := "me"
@@ -139,13 +139,13 @@ func checkInbox() {
 		MaxResults(10)
 	res, err := req.Do()
 	if err != nil {
-		log.Fatalf("Unable to retrieve messages: %v", err)
+		return fmt.Errorf("Unable to retrieve messages: %v", err)
 	}
 	processed := loadProcessedIDs("processed_ids.txt")
 	
 	f, err := os.OpenFile("processed_ids.txt", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
-		log.Fatalf("Unable to open processed_ids.txt: %v", err)
+		return fmt.Errorf("Unable to open processed_ids.txt: %v", err)
 	}
 	defer f.Close()
 
@@ -174,12 +174,12 @@ func checkInbox() {
 		var event CalendarEvent
 		err = json.Unmarshal([]byte(gptResponse), &event)
 		if err != nil {
-			log.Fatalf("Failed to parse GPT response: %v", err)
+			return fmt.Errorf("❌ Failed to parse GPT response: %v", err)
 		}
 
 		parsedStartTime, err := parseToEastern(event.StartTime)
 		if err != nil {
-			log.Fatalf("❌ Couldn't parse start_time: %v", err)
+			return fmt.Errorf("❌ Couldn't parse start_time: %v", err)
 		}
 		event.StartTime = parsedStartTime.Format(time.RFC3339)
 
@@ -195,7 +195,7 @@ func checkInbox() {
 		parsedEndTime, err := parseToEastern(event.EndTime)
 
 		if err != nil {
-			log.Fatalf("❌ Couldn't parse end_time: %v", err)
+			return fmt.Errorf("❌ Couldn't parse end_time: %v", err)
 		}
 		event.EndTime = parsedEndTime.Format(time.RFC3339)
 
@@ -211,13 +211,14 @@ func checkInbox() {
 
 		err = createGoogleCalendarEvent(event)
 		if err != nil {
-			log.Fatalf("Failed to create calendar event: %v", err)
+			return fmt.Errorf("failed to create calendar event: %w", err)
 		}
 
 		if _, err := f.WriteString(m.Id + "\n"); err != nil {
 			log.Printf("Failed to save processed ID: %v", err)
 		}
 	}
+	return nil
 }
 
 func extractEmailBody(msg *gmail.Message) string {
